@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-secret
+  namespace: default
+data:
+  mysql-password: c2FtcGxlUGFzcw==
+  mysql-root-password: cm9vdFBhc3M=
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    role: db
+  name: todo-db
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      role: db-instance
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        role: db-instance
+    spec:
+      containers:
+      - name: mysql-db
+        image: mysql:5.6.35
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3306
+        env:
+        - name: MYSQL_USER
+          value: sampleuser
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: mysql-password
+        - name: MYSQL_DATABASE
+          value: sampleDb
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: mysql-root-password
+        volumeMounts:
+        - name: db-volume
+          mountPath: "/var/lib/mysql"
+      volumes:
+        - name: db-volume
+          hostPath:
+            path: "/home/docker/db-data"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-db-service
+  labels:
+    role: db-service
+  namespace: default
+spec:
+  ports:
+  - port: 3306
+    targetPort: 3306
+  selector:
+    role: db-instance
+  type: NodePort
