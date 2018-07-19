@@ -1,74 +1,103 @@
+# db-secretという名前のSecretをNamespace defaultに作成する
 apiVersion: v1
 kind: Secret
 metadata:
   name: db-secret
   namespace: default
 data:
+  # mysql-passwordというキー名でsamplePassという値をbase64エンコードした値を設定
   mysql-password: c2FtcGxlUGFzcw==
+  # mysql-root-passwordというキー名でrootPassという値をbase64エンコードした値を設定
   mysql-root-password: cm9vdFBhc3M=
 ---
+# todo-dbという名前のDeploymentをNamespace defaultに作成
 apiVersion: extensions/v1beta1
 kind: Deployment
+# role: dbというラベルをDeploymentに持つ
 metadata:
   labels:
     role: db
   name: todo-db
   namespace: default
 spec:
+  # Podの最大可動台数は1台
   replicas: 1
   selector:
     matchLabels:
       role: db-instance
   strategy:
+    # アップデートはrollingUpdateを行う
     rollingUpdate:
+      # Podの最大台数は1台まで超えてよい
       maxSurge: 1
+      # アップデートの際には利用不能となるインスタンスを作らない
       maxUnavailable: 0
     type: RollingUpdate
+  # Podテンプレートの内容
   template:
     metadata:
+      # role: db-instanceというラベルをPodに持つ
       labels:
         role: db-instance
     spec:
       containers:
+      # mysql-dbという名前のコンテナ1台から成り立つPod
       - name: mysql-db
+        # docker imageはmysql:5.6.35
         image: mysql:5.6.35
+        # docker imageはPodが作成される際には毎回pullする
         imagePullPolicy: Always
+        # コンテナの3306番ポートをPodの3306番ポートとして利用する
         ports:
         - containerPort: 3306
+        # 環境変数の設定
         env:
+        # MYSQL_USERという名前でsampleuserという値を持つ
         - name: MYSQL_USER
           value: sampleuser
+        # MYSQL_PASSWORDという名前でdb-secretのmysql-passwordというキーの値を持つ
         - name: MYSQL_PASSWORD
           valueFrom:
             secretKeyRef:
               name: db-secret
               key: mysql-password
+        # MYSQL_DATABASEという名前でsampleDbという値を持つ
         - name: MYSQL_DATABASE
           value: sampleDb
+        # MYSQL_ROOT_PASSWORDという名前でdb-secretのmysql-root-passwordというキーの値を持つ
         - name: MYSQL_ROOT_PASSWORD
           valueFrom:
             secretKeyRef:
               name: db-secret
               key: mysql-root-password
+        # ボリュームのマウン
+        # Kubernetesのホストの/home/docker/db-dataというパスをコンテナの/var/lib/mysqlにマウントする
         volumeMounts:
         - name: db-volume
           mountPath: "/var/lib/mysql"
       volumes:
         - name: db-volume
+          # hostPath指定は通常は使わない指定方法
+          # 複数ノード上で動作させる場合は不具合の原因になることがある
           hostPath:
             path: "/home/docker/db-data"
 ---
+# このDeploymentをKubernetes内の他のServiceから利用するためにServiceして定義する
+# todo-db-serviceという名前のServiceをNamespace defaultに作成する
 apiVersion: v1
 kind: Service
 metadata:
   name: todo-db-service
+  # role: db-serviceというラベルを持つ
   labels:
     role: db-service
   namespace: default
 spec:
+  # 他Serviceからアクセスされる際のポートは3306番とし、そのポートにアクセスされた歳にはPodの3306番ポートにアクセスを転送する
   ports:
   - port: 3306
     targetPort: 3306
+  # role: db-instanceというラベルを持つPodの集合に対してのServiceとする
   selector:
     role: db-instance
   type: NodePort

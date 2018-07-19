@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: s3-secret
+  namespace: default
+data:
+  secret-key: bWluaW8xMjM=
+---
+# minio-pv-claimという名前のPersistentVolumeClaimを作成する
+apiVersion: v1
+kind: PersistentVolumeClaim
+# namespaceを省略しているため、defaultに作成される
+metadata:
+  name: minio-pv-claim
+spec:
+  # minikubeでの単一ノードからのアクセスでもあるため、ReadWriteOnceを指定
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    role: s3
+  name: todo-s3
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      role: s3-instance
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        role: s3-instance
+    spec:
+      containers:
+      - name: minio-s3
+        image: minio/minio:RELEASE.2018-01-02T23-07-00Z
+        # コンテナのCMDをserver /dataに書き換えて実行
+        # KubernetesではDockerでいうCMDをargsで定義し、ENTRYPOINYをcommandという名前で指定する
+        # http://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/
+        args: ["server", "/data"]
+        ports:
+        - containerPort: 9000
+        env:
+        - name: MINIO_ACCESS_KEY
+          value: minio
+        - name: MINIO_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: s3-secret
+              key: secret-key
+        # persistentVolumeで要求したminio-pv-claimというボリュームをコンテナの/dataにマウントする
+        volumeMounts:
+        - name: s3-data
+          mountPath: "/data"
+        - name: s3-config-data
+          mountPath: "/root/.minio"
+      # Kubernetesのホストの/home/docker/s3-config-dataというパスをコンテナの/root/.minioにマウントする
+      volumes:
+        - name: s3-data
+          persistentVolumeClaim:
+            claimName: minio-pv-claim
+        - name: s3-config-data
+          hostPath:
+            path: "/home/docker/s3-config-data"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-s3-service
+  labels:
+    roles: s3-service
+  namespace: default
+spec:
+  ports:
+  - port: 80
+    targetPort: 9000
+  selector:
+    role: s3-instance
+  type: NodePort

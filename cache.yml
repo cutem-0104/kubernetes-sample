@@ -1,7 +1,10 @@
+# キャッシュサーバーのDeploymentを作成
 apiVersion: extensions/v1beta1
+# todo-cacheという名前のDeploymentをNamespace defaultに作成する
 kind: Deployment
 metadata:
   labels:
+    # role: cacheというラベルをDeploymentに持つ
     role: cache
   name: todo-cache
   namespace: default
@@ -10,40 +13,50 @@ spec:
   selector:
     matchLabels:
       role: cache-instance
-  strategy:
+  strategy: # アップデートはrollingUpdateを行う
     rollingUpdate:
+      # Podの最大台数は1台まで超えてよい
       maxSurge: 1
+      # アップデートの際には利用不能となるインスタンスを作らない
       maxUnavailable: 0
     type: RollingUpdate
   template:
     metadata:
       labels:
+        # role: cache-instanceというラベルをPodにもつ
         role: cache-instance
     spec:
+      # redis-cacheという名前のコンテナ1台からなりたつPod
       containers:
         - name: redis-cache
+          # docker imageはredis:latestを使う
           image: redis
+          # docker imageはPodが作成される際には毎回pullする
           imagePullPolicy: Always
-          ports:
+          ports: # コンテナの6379番ポートをPodの6379番ポートとして利用する
           - containerPort: 6379
           resources:
+            # メモリの最低容量を64MB,最大容量を128MBとする
             requests:
               memory: "64Mi"
             limits:
               memory: "128Mi"
 
 ---
+# todo-cache-serviceという名前のServiceをNamespace defaultに作成する
 apiVersion: v1
 kind: Service
 metadata:
   name: todo-cache-service
   labels:
+    # role: cache-serviceというラベルを持つ
     role: cache-service
   namespace: default
 spec:
-  ports:
+  ports: # 他Serviceからアクセスされる際のポートは6379番とし,そのポートにアクセスされた際にはPodの6379番ポートにアクセスを転送する
   - port: 6379
     targetPort: 6379
-  selector:
+  selector: # role: cache-instanceというラベルをもつPodの集合に対してのServiceとする
     role: cache-instance
+  # 今回は裏側のPodは1つだが,複数のPodがあった場合にはServiceのアクセスは複数のPodに対して分散される
   type: NodePort
