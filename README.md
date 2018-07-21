@@ -91,6 +91,15 @@ minikube service todo-db-service --url
 brew install mysql
 # mysqlの接続
 mysql -h 12.168.99.100 -P 32065 -usampleuser -psamplePass
+# テーブルの作成
+USE sampleDb;
+CREATE TABLE `todos` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `title` varchar(128) DEFAULT NULL,
+  `image_url` varchar(256) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+SHOW tables;
 ```
 
 ## ファイルサーバーを立てる
@@ -119,3 +128,24 @@ mc ls
 vi /root/.mc/config.json # localブロック内を編集 urlはminioのurlを入れる
 mc ls local
 mc policy public local/kubernetes-sample-bucket
+```
+
+## アプリケーションサーバーをたてる
+
+```bash
+# アドオンの状態を確認する
+minikube addons list
+# ingressの状態がdesabledになっている場合は有効にする
+minikube addons enable ingress
+# コンテナの起動
+kubectl apply -f application.yml
+```
+
+http://127.0.0.1:8001/api/v1/namespaces/kube-system/services/http:kubernetes-dashboard:/proxy
+にアクセスし、緑色のチェックマークとともにDeployment,Pod,Service Ingressが表示されていれば無事に動作している
+
+```bash
+minikube service todo-application-service --url
+```
+
+表示されたURLにアクセスして表示されること、TODOが作成できることを確認
