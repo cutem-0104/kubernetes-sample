@@ -1,8 +1,9 @@
-# brewとminikubeのインストール
+# Kubernetesチュートリアル
 
 ## 事前準備
 
-- virtualboxをインストールしておく
+- virtualbox
+- docker-ce
 
 ```bash
 # minikubeのインストール
